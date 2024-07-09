@@ -6,6 +6,7 @@ let redis: Redis | undefined = undefined;
 let redisSubscribers: Set<Redis> | undefined = undefined;
 
 export function initRedis(config: MedplumRedisConfig): void {
+  console.log('Redis config:', config);
   redis = new Redis(config);
 }
 
@@ -37,8 +38,11 @@ export async function closeRedis(): Promise<void> {
  */
 export function getRedis(): Redis & { duplicate: never } {
   if (!redis) {
+    console.log('Redis not initialized')
     throw new Error('Redis not initialized');
   }
+
+  console.log('Redis fetched');
   // @ts-expect-error We don't want anyone to call `duplicate on the redis global instance
   // This is because we want to gracefully `quit` and duplicated Redis instances will
   return redis;

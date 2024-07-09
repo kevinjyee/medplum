@@ -223,16 +223,31 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
   }
 
   async createResource<T extends Resource>(resource: T): Promise<T> {
+    console.log('Creating resource');
+
     const resourceWithId = {
       ...resource,
       id: randomUUID(),
     };
+    console.log(`Resource with ID: ${resourceWithId.id} created`);
+
     try {
+      console.log('Updating resource implementation');
+
       const result = await this.updateResourceImpl(resourceWithId, true);
+
+      console.log('Resource implementation updated successfully');
+
       this.logEvent(CreateInteraction, AuditEventOutcome.Success, undefined, result);
+      console.log('Event logged successfully');
+
       return result;
     } catch (err) {
+      console.error('Error updating resource implementation', err);
+
       this.logEvent(CreateInteraction, AuditEventOutcome.MinorFailure, err, resourceWithId);
+      console.error('Event logged with failure');
+
       throw err;
     }
   }
@@ -261,13 +276,24 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
       throw new OperationOutcomeError(notFound);
     }
 
+    console.log('In ReadResourceImpl');
+    console.log('Validating resource:', resourceType);
+
     validateResourceType(resourceType);
+
+    console.log('Resource type validated:', resourceType);
+
 
     if (!this.canReadResourceType(resourceType)) {
       throw new OperationOutcomeError(forbidden);
     }
 
+    console.log('Can read resource type:', resourceType);
+
+
     const cacheRecord = await getCacheEntry<T>(resourceType, id);
+
+    console.log('Cache record fetched:', cacheRecord);
     if (cacheRecord) {
       // This is an optimization to avoid a database query.
       // However, it depends on all values in the cache having "meta.compartment"
@@ -289,21 +315,33 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
   }
 
   private async readResourceFromDatabase<T extends Resource>(resourceType: string, id: string): Promise<T> {
+    console.log('Entering readResourceFromDatabase:', { resourceType, id });
+
     const builder = new SelectQuery(resourceType).column('content').column('deleted').where('id', '=', id);
+    console.log('Query builder initialized:', builder);
 
     this.addSecurityFilters(builder, resourceType);
+    console.log('Security filters added to query builder');
 
     const rows = await builder.execute(this.getDatabaseClient());
+    console.log('Database query executed, rows:', rows);
+
     if (rows.length === 0) {
+      console.error('No rows found, resource not found:', { resourceType, id });
       throw new OperationOutcomeError(notFound);
     }
 
     if (rows[0].deleted) {
+      console.error('Resource is deleted:', { resourceType, id });
       throw new OperationOutcomeError(gone);
     }
 
     const resource = JSON.parse(rows[0].content as string) as T;
+    console.log('Resource parsed from JSON:', resource);
+
     await setCacheEntry(resource);
+    console.log('Resource set in cache:', resource);
+
     return resource;
   }
 
@@ -534,34 +572,46 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
 
   private async updateResourceImpl<T extends Resource>(resource: T, create: boolean, versionId?: string): Promise<T> {
     const { resourceType, id } = resource;
+    console.log(`updateResourceImpl called with resourceType: ${resourceType}, id: ${id}, create: ${create}, versionId: ${versionId}`);
+
     if (!id) {
+      console.error('Missing id');
       throw new OperationOutcomeError(badRequest('Missing id'));
     }
     if (!validator.isUUID(id)) {
+      console.error('Invalid id');
       throw new OperationOutcomeError(badRequest('Invalid id'));
     }
+
+    console.log('Validating resource');
     await this.validateResource(resource);
+    console.log('Resource validated');
 
     if (!this.canWriteResourceType(resourceType)) {
+      console.error('Cannot write resource type');
       throw new OperationOutcomeError(forbidden);
     }
 
+    console.log('Checking existing resource');
     const existing = await this.checkExistingResource<T>(resourceType, id, create);
     if (existing) {
       (existing.meta as Meta).compartment = this.getCompartments(existing);
       if (!this.canWriteToResource(existing)) {
-        // Check before the update
+        console.error('Cannot write to resource');
         throw new OperationOutcomeError(forbidden);
       }
       if (versionId && existing.meta?.versionId !== versionId) {
+        console.error('Version ID does not match');
         throw new OperationOutcomeError(preconditionFailed);
       }
     }
 
+    console.log('Rewriting attachments');
     let updated = await rewriteAttachments<T>(RewriteMode.REFERENCE, this, {
       ...this.restoreReadonlyFields(resource, existing),
     });
     updated = await replaceConditionalReferences(this, updated);
+    console.log('Attachments rewritten and conditional references replaced');
 
     const resultMeta = {
       ...updated.meta,
@@ -582,25 +632,41 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
     resultMeta.compartment = this.getCompartments(result);
 
     if (this.context.checkReferencesOnWrite) {
+      console.log('Validating references');
       await validateReferences(this, result);
+      console.log('References validated');
     }
 
     if (this.isNotModified(existing, result)) {
+      console.log('Resource not modified');
       this.removeHiddenFields(existing);
       return existing;
     }
 
     if (!this.isResourceWriteable(existing, result)) {
-      // Check after the update
+      console.error('Resource is not writeable');
       throw new OperationOutcomeError(forbidden);
     }
 
+    console.log('Handling binary update');
     await this.handleBinaryUpdate(existing, result);
+    console.log('Binary update handled');
+
+    console.log('Handling storage');
     await this.handleStorage(result, create);
+    console.log('Storage handled');
+
+    console.log('Adding background jobs');
     await addBackgroundJobs(result, { interaction: create ? 'create' : 'update' });
+    console.log('Background jobs added');
+
     this.removeHiddenFields(result);
+    console.log('Hidden fields removed');
+
+    console.log('Resource update complete');
     return result;
   }
+
 
   /**
    * Handles a Binary resource update.
@@ -791,21 +857,26 @@ export class Repository extends BaseRepository implements FhirRepository<PoolCli
     id: string,
     create: boolean
   ): Promise<T | undefined> {
+    console.log('Checking existing resource in checkExistingResource function');
     try {
-      return await this.readResourceImpl<T>(resourceType, id);
+      const resource = await this.readResourceImpl<T>(resourceType, id);
+      console.log('Resource read successfully:', resource);
+      return resource;
     } catch (err) {
       const outcome = normalizeOperationOutcome(err);
+      console.error('Error reading resource:', outcome);
+
       if (!isOk(outcome) && !isNotFound(outcome) && !isGone(outcome)) {
+        console.error('Unhandled error outcome:', outcome);
         throw new OperationOutcomeError(outcome, err);
       }
 
       if (!create && isNotFound(outcome) && !this.canSetId()) {
+        console.error('Cannot set ID for new resource when not creating:', outcome);
         throw new OperationOutcomeError(outcome, err);
       }
 
-      // Otherwise, it is ok if the resource is not found.
-      // This is an "update" operation, and the outcome is "not-found" or "gone",
-      // and the current user has permission to create a new version.
+      console.log('Resource not found or gone, and it is ok to proceed');
       return undefined;
     }
   }
@@ -2018,9 +2089,28 @@ async function getCacheEntry<T extends Resource>(
   resourceType: T['resourceType'],
   id: string
 ): Promise<CacheEntry<T> | undefined> {
-  const cachedValue = await getRedis().get(getCacheKey(resourceType, id));
-  return cachedValue ? (JSON.parse(cachedValue) as CacheEntry<T>) : undefined;
+  console.log('Getting Cache Entry via Redis...');
+
+  const timeoutPromise = new Promise<CacheEntry<T> | undefined>((resolve) => {
+    setTimeout(() => {
+      console.error('Redis get operation timed out');
+      resolve(undefined);
+    }, 5000); // Set timeout duration as needed (5000ms = 5 seconds)
+  });
+
+  const redisPromise = new Promise<CacheEntry<T> | undefined>(async (resolve, reject) => {
+    try {
+      const cachedValue = await getRedis().get(getCacheKey(resourceType, id));
+      resolve(cachedValue ? (JSON.parse(cachedValue) as CacheEntry<T>) : undefined);
+    } catch (error) {
+      console.error('Error getting cache entry from Redis:', error);
+      reject(error);
+    }
+  });
+
+  return Promise.race([timeoutPromise, redisPromise]);
 }
+
 
 /**
  * Performs a bulk read of cache entries from Redis.
@@ -2084,6 +2174,7 @@ async function deleteCacheEntries(resourceType: string, ids: string[]): Promise<
  * @returns The Redis cache key.
  */
 function getCacheKey(resourceType: string, id: string): string {
+  console.log('Getting Cache Key...')
   return `${resourceType}/${id}`;
 }
 

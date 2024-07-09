@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 
-if [[ -z "${DOCKERHUB_REPOSITORY}" ]]; then
-  echo "DOCKERHUB_REPOSITORY is missing"
-  exit 1
-fi
+#if [[ -z "${DOCKERHUB_REPOSITORY}" ]]; then
+#  echo "DOCKERHUB_REPOSITORY is missing"
+#  exit 1
+#fi
+
+DOCKERHUB_REPOSITORY=491707605280.dkr.ecr.us-east-1.amazonaws.com/phasezero-medplum
 
 # Fail on error
 set -e
@@ -28,10 +30,10 @@ tar \
   packages/server/dist
 
 # Target platforms
-PLATFORMS="--platform linux/amd64,linux/arm64,linux/arm/v7"
+PLATFORMS="--platform linux/amd64,linux/arm64"
 
 # Build tags
-TAGS="--tag $DOCKERHUB_REPOSITORY:latest --tag $DOCKERHUB_REPOSITORY:$GITHUB_SHA"
+TAGS="--tag $DOCKERHUB_REPOSITORY:latest --tag $DOCKERHUB_REPOSITORY"
 
 # If this is a release, tag with version
 # Release is specified with a "--release" argument
@@ -43,5 +45,14 @@ for arg in "$@"; do
   fi
 done
 
-# Build and push Docker images
-docker buildx build $PLATFORMS $TAGS --push .
+# Create and use Docker Buildx builder instances
+docker buildx create --name mybuilder19 --driver docker-container --use
+
+# Ensure we are using the correct builder instance for each build
+docker buildx use mybuilder19
+
+# Build and push Docker images using Docker version 19.03.6
+docker buildx build $PLATFORMS $TAGS --push --build-arg DOCKER_VERSION=19.03.6 .
+
+# Remove the builder instances
+docker buildx rm mybuilder19

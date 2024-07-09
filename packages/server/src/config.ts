@@ -206,6 +206,9 @@ function loadEnvConfig(): MedplumServerConfig {
   const config: Record<string, any> = {};
   // Iterate over all environment variables
   for (const [name, value] of Object.entries(process.env)) {
+
+    // Log all environment variables
+    console.log(name, value);
     if (!name.startsWith('MEDPLUM_')) {
       continue;
     }

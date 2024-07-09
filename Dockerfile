@@ -11,10 +11,11 @@
 # linux/amd64, linux/arm64, linux/arm/v7
 # https://github.com/docker-library/official-images#architectures-other-than-amd64
 
-FROM --platform=$TARGETPLATFORM node:20-slim
+FROM --platform=$TARGETPLATFORM node:20.8.0-alpine3.17
 ENV NODE_ENV production
 WORKDIR /usr/src/medplum
 ADD ./medplum-server.tar.gz ./
 RUN npm ci --maxsockets 1
-EXPOSE 5000 8103
+EXPOSE 8103
+ENV CONFIG_NAME=env
 ENTRYPOINT [ "node", "--require", "./packages/server/dist/otel/instrumentation.js", "packages/server/dist/index.js" ]

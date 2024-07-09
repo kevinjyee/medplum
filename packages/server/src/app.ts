@@ -195,14 +195,39 @@ export async function initApp(app: Express, config: MedplumServerConfig): Promis
 
 export function initAppServices(config: MedplumServerConfig): Promise<void> {
   return requestContextStore.run(AuthenticatedRequestContext.system(), async () => {
+    console.log('Loading structure definitions');
     loadStructureDefinitions();
+    console.log('Structure definitions loaded');
+
+    console.log('Initializing Redis');
     initRedis(config.redis);
+    console.log('Redis initialized');
+
+    console.log('Initializing database');
     await initDatabase(config);
+    console.log('Database initialized');
+
+    console.log('Seeding database');
     await seedDatabase();
+    console.log('Database seeded');
+
+    console.log('Initializing keys');
     await initKeys(config);
+    console.log('Keys initialized');
+
+    console.log('Initializing binary storage');
     initBinaryStorage(config.binaryStorage);
+    console.log('Binary storage initialized');
+
+    console.log('Initializing workers');
     initWorkers(config);
+    console.log('Workers initialized');
+
+    console.log('Initializing heartbeat');
     initHeartbeat(config);
+    console.log('Heartbeat initialized');
+
+    console.log('Application services initialization complete');
   });
 }
 

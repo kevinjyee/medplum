@@ -16,8 +16,8 @@
   "scripts": {
     "build": "npm run clean && tsc --project tsconfig.build.json",
     "clean": "rimraf dist",
-    "dev": "ts-node-dev --poll --respawn --transpile-only --require ./src/otel/instrumentation.ts src/index.ts",
-    "start": "node --require ./dist/otel/instrumentation.js dist/index.js",
+    "dev": "ts-node-dev --poll --respawn --transpile-only --require ./src/otel/instrumentation.ts src/index.ts env",
+    "start": "node --require ./dist/otel/instrumentation.js dist/index.js env",
     "test": "jest",
     "test:seed": "jest seed.test.ts --testTimeout=240000"
   },
